@@ -6,15 +6,12 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
-import edu.wpi.first.math.util.Units;
 import frc.robot.Constants.ModuleConstants;
-import com.ctre.phoenix.sensors.CANCoderConfiguration;
-import com.ctre.phoenix.sensors.WPI_CANCoder;
-
-import edu.wpi.first.wpilibj.Encoder;
-import edu.wpi.first.wpilibj.motorcontrol.Talon;
+import frc.robot.utils.TalonFXUtils;
 
 import com.ctre.phoenix.motorcontrol.ControlMode;
+import com.ctre.phoenix.motorcontrol.FeedbackDevice;
+import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.can.*;
 
 public class SwerveModule {
@@ -37,30 +34,56 @@ public class SwerveModule {
             boolean driveEncoderReversed,
             boolean turningEncoderReversed // check this out???
     ) {
-        m_driveMotor = new TalonFX(driveMotorChannel);
-        m_turningMotor = new TalonFX(turningMotorChannel);
+        m_driveMotor = configureDriveMotor(driveMotorChannel);
+        m_turningMotor = configureTurningMotor(turningMotorChannel);
+    }
+
+    private TalonFX configureDriveMotor(int channel) {
+        TalonFX driveMotor = new TalonFX(channel);
+
+        TalonFXConfiguration driveConfig = new TalonFXConfiguration();
+        driveConfig.neutralDeadband = 0.001;
+        driveConfig.primaryPID.selectedFeedbackSensor = FeedbackDevice.IntegratedSensor;
+        driveMotor.configAllSettings(driveConfig);
+
+        driveMotor.setInverted(true);
+        driveMotor.setNeutralMode(NeutralMode.Brake);
+
+        return driveMotor;
+    }
+    private TalonFX configureTurningMotor(int channel) { 
+        TalonFX turningMotor = new TalonFX(channel);
+
+        TalonFXConfiguration driveConfig = new TalonFXConfiguration();
+        driveConfig.neutralDeadband = 0.001;
+        driveConfig.primaryPID.selectedFeedbackSensor = FeedbackDevice.IntegratedSensor;
+        turningMotor.configAllSettings(driveConfig);
+
+        turningMotor.setInverted(true);
+        turningMotor.setNeutralMode(NeutralMode.Brake);
+
+        return turningMotor;
     }
 
     public SwerveModuleState getState() {
-        return new SwerveModuleState(m_driveMotor.getSelectedSensorVelocity(),
-                new Rotation2d(m_turningMotor.getSelectedSensorPosition()));
+        return new SwerveModuleState(TalonFXUtils.TalonFXSensorVelocityToMetersPerSecond(m_driveMotor.getSelectedSensorVelocity()),
+                new Rotation2d(TalonFXUtils.SwerveTalonFXSensorPositionToMeters(m_turningMotor.getSelectedSensorPosition())));
     }
 
     public SwerveModulePosition getPosition() {
-        double distance = m_driveMotor.getSelectedSensorPosition() * ModuleConstants.kDriveEncoderDistancePerPulse;
-        double turningDistance = m_turningMotor.getSelectedSensorPosition()
-                * ModuleConstants.kTurningEncoderDistancePerPulse;
+        double distance = TalonFXUtils.TalonFXSensorPositionToMeters(m_driveMotor.getSelectedSensorPosition());
+        double turningDistance = TalonFXUtils.SwerveTalonFXSensorPositionToMeters(m_turningMotor.getSelectedSensorPosition());
         return new SwerveModulePosition(
                 distance, new Rotation2d(turningDistance));
     }
 
     public void setDesiredState(SwerveModuleState desiredState) {
         SwerveModuleState state = SwerveModuleState.optimize(desiredState,
-                new Rotation2d(m_turningMotor.getSelectedSensorPosition()));
+                new Rotation2d(TalonFXUtils.SwerveTalonFXSensorPositionToMeters(m_turningMotor.getSelectedSensorPosition())));
 
-        final double driveOutput = m_drivePIDController.calculate(m_driveMotor.getSelectedSensorVelocity(),
+        final double driveOutput = m_drivePIDController.calculate(TalonFXUtils.TalonFXSensorVelocityToMetersPerSecond(m_driveMotor.getSelectedSensorVelocity()),
                 state.speedMetersPerSecond);
-        final double turnOutput = m_turningPIDController.calculate(m_turningMotor.getSelectedSensorVelocity(),
+        final double turnOutput = m_turningPIDController.calculate(TalonFXUtils.SwerveTalonFXSensorPositionToMeters(m_turningMotor.getSelectedSensorVelocity()),
                 state.angle.getRadians());
 
         m_driveMotor.set(ControlMode.PercentOutput, driveOutput);
